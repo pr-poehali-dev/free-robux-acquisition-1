@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/icon';
 
@@ -12,6 +15,14 @@ interface Notification {
   time: string;
 }
 
+interface Withdrawal {
+  id: number;
+  amount: number;
+  username: string;
+  status: 'pending' | 'completed' | 'failed';
+  date: string;
+}
+
 const Index = () => {
   const [balance, setBalance] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([
@@ -19,14 +30,24 @@ const Index = () => {
     { id: 2, title: 'Ежедневная награда', amount: 25, time: '1 час назад' },
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [robloxUsername, setRobloxUsername] = useState('');
+  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
 
   useEffect(() => {
     const savedBalance = localStorage.getItem('robuxBalance');
+    const savedWithdrawals = localStorage.getItem('robuxWithdrawals');
+    
     if (savedBalance) {
       setBalance(parseInt(savedBalance));
     } else {
       setBalance(50);
       localStorage.setItem('robuxBalance', '50');
+    }
+    
+    if (savedWithdrawals) {
+      setWithdrawals(JSON.parse(savedWithdrawals));
     }
   }, []);
 
@@ -46,6 +67,76 @@ const Index = () => {
     toast.success(`+${amount} Robux`, {
       description: reason,
     });
+  };
+
+  const handleWithdraw = () => {
+    const amount = parseInt(withdrawAmount);
+    
+    if (!robloxUsername.trim()) {
+      toast.error('Ошибка', { description: 'Введите имя пользователя Roblox' });
+      return;
+    }
+    
+    if (isNaN(amount) || amount < 50) {
+      toast.error('Ошибка', { description: 'Минимальная сумма вывода - 50 Robux' });
+      return;
+    }
+    
+    if (amount > balance) {
+      toast.error('Недостаточно средств', { description: `На балансе ${balance} Robux` });
+      return;
+    }
+    
+    const newBalance = balance - amount;
+    setBalance(newBalance);
+    localStorage.setItem('robuxBalance', newBalance.toString());
+    
+    const newWithdrawal: Withdrawal = {
+      id: Date.now(),
+      amount,
+      username: robloxUsername,
+      status: 'pending',
+      date: new Date().toLocaleDateString('ru-RU')
+    };
+    
+    const updatedWithdrawals = [newWithdrawal, ...withdrawals];
+    setWithdrawals(updatedWithdrawals);
+    localStorage.setItem('robuxWithdrawals', JSON.stringify(updatedWithdrawals));
+    
+    setTimeout(() => {
+      const completed = updatedWithdrawals.map(w => 
+        w.id === newWithdrawal.id ? { ...w, status: 'completed' as const } : w
+      );
+      setWithdrawals(completed);
+      localStorage.setItem('robuxWithdrawals', JSON.stringify(completed));
+      toast.success('Вывод завершён!', { description: `${amount} Robux отправлены на @${robloxUsername}` });
+    }, 3000);
+    
+    toast.success('Заявка принята!', { 
+      description: `Вывод ${amount} Robux обрабатывается` 
+    });
+    
+    setWithdrawAmount('');
+    setRobloxUsername('');
+    setShowWithdrawDialog(false);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'completed': return 'bg-green-500';
+      case 'pending': return 'bg-yellow-500';
+      case 'failed': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch(status) {
+      case 'completed': return 'Завершён';
+      case 'pending': return 'В обработке';
+      case 'failed': return 'Отклонён';
+      default: return 'Неизвестно';
+    }
   };
 
   const steps = [
@@ -271,6 +362,115 @@ const Index = () => {
             </Card>
           </div>
         </Card>
+      </section>
+
+      <section className="container mx-auto px-4 py-20">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-8">
+          <Card className="p-8 bg-card/80 backdrop-blur-sm">
+            <CardHeader className="px-0 pt-0">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                  <Icon name="ArrowDownToLine" size={24} className="text-white" />
+                </div>
+                <CardTitle className="text-2xl">Вывод Robux</CardTitle>
+              </div>
+              <CardDescription>
+                Минимальная сумма вывода: 50 Robux
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-0 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Имя пользователя Roblox</Label>
+                <Input
+                  id="username"
+                  placeholder="Введите ваш никнейм"
+                  value={robloxUsername}
+                  onChange={(e) => setRobloxUsername(e.target.value)}
+                  className="bg-background"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="amount">Сумма вывода (Robux)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="50"
+                  min="50"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="bg-background"
+                />
+              </div>
+              
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-muted-foreground">Доступно:</span>
+                  <span className="font-bold text-primary text-lg">{balance} R$</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Комиссия:</span>
+                  <span className="font-semibold">0%</span>
+                </div>
+              </div>
+              
+              <Button 
+                className="w-full text-lg py-6 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90"
+                onClick={handleWithdraw}
+                disabled={!robloxUsername || !withdrawAmount || parseInt(withdrawAmount) < 50}
+              >
+                <Icon name="Send" size={20} className="mr-2" />
+                Вывести Robux
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="p-8 bg-card/80 backdrop-blur-sm">
+            <CardHeader className="px-0 pt-0">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary to-accent flex items-center justify-center">
+                  <Icon name="History" size={24} className="text-white" />
+                </div>
+                <CardTitle className="text-2xl">История выводов</CardTitle>
+              </div>
+              <CardDescription>
+                Последние транзакции
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-0">
+              {withdrawals.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Icon name="Inbox" size={48} className="mx-auto mb-4 opacity-50" />
+                  <p>История выводов пуста</p>
+                  <p className="text-sm mt-2">Сделайте первый вывод!</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                  {withdrawals.map((withdrawal) => (
+                    <div 
+                      key={withdrawal.id} 
+                      className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="font-semibold text-lg">{withdrawal.amount} Robux</p>
+                          <p className="text-sm text-muted-foreground">@{withdrawal.username}</p>
+                        </div>
+                        <Badge className={`${getStatusColor(withdrawal.status)} text-white`}>
+                          {getStatusText(withdrawal.status)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Icon name="Calendar" size={14} />
+                        <span>{withdrawal.date}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       <footer className="border-t border-border/50 mt-20">
