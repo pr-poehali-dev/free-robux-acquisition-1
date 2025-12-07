@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import Icon from '@/components/ui/icon';
 
@@ -18,7 +18,10 @@ interface Notification {
 interface Withdrawal {
   id: number;
   amount: number;
-  username: string;
+  username?: string;
+  cardName?: string;
+  cardCode?: string;
+  method: 'account' | 'card';
   status: 'pending' | 'completed' | 'failed';
   date: string;
 }
@@ -33,7 +36,9 @@ const Index = () => {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [robloxUsername, setRobloxUsername] = useState('');
-  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
+  const [cardName, setCardName] = useState('');
+  const [cardCode, setCardCode] = useState('');
+  const [withdrawMethod, setWithdrawMethod] = useState<'account' | 'card'>('account');
 
   useEffect(() => {
     const savedBalance = localStorage.getItem('robuxBalance');
@@ -72,9 +77,20 @@ const Index = () => {
   const handleWithdraw = () => {
     const amount = parseInt(withdrawAmount);
     
-    if (!robloxUsername.trim()) {
+    if (withdrawMethod === 'account' && !robloxUsername.trim()) {
       toast.error('Ошибка', { description: 'Введите имя пользователя Roblox' });
       return;
+    }
+    
+    if (withdrawMethod === 'card') {
+      if (!cardName.trim()) {
+        toast.error('Ошибка', { description: 'Введите название карты' });
+        return;
+      }
+      if (!cardCode.trim()) {
+        toast.error('Ошибка', { description: 'Введите код активации карты' });
+        return;
+      }
     }
     
     if (isNaN(amount) || amount < 50) {
@@ -94,7 +110,9 @@ const Index = () => {
     const newWithdrawal: Withdrawal = {
       id: Date.now(),
       amount,
-      username: robloxUsername,
+      method: withdrawMethod,
+      ...(withdrawMethod === 'account' && { username: robloxUsername }),
+      ...(withdrawMethod === 'card' && { cardName, cardCode }),
       status: 'pending',
       date: new Date().toLocaleDateString('ru-RU')
     };
@@ -109,7 +127,12 @@ const Index = () => {
       );
       setWithdrawals(completed);
       localStorage.setItem('robuxWithdrawals', JSON.stringify(completed));
-      toast.success('Вывод завершён!', { description: `${amount} Robux отправлены на @${robloxUsername}` });
+      
+      const description = withdrawMethod === 'account' 
+        ? `${amount} Robux отправлены на @${robloxUsername}`
+        : `Карта "${cardName}" пополнена на ${amount} Robux`;
+      
+      toast.success('Вывод завершён!', { description });
     }, 3000);
     
     toast.success('Заявка принята!', { 
@@ -118,7 +141,8 @@ const Index = () => {
     
     setWithdrawAmount('');
     setRobloxUsername('');
-    setShowWithdrawDialog(false);
+    setCardName('');
+    setCardCode('');
   };
 
   const getStatusColor = (status: string) => {
@@ -379,16 +403,56 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">Имя пользователя Roblox</Label>
-                <Input
-                  id="username"
-                  placeholder="Введите ваш никнейм"
-                  value={robloxUsername}
-                  onChange={(e) => setRobloxUsername(e.target.value)}
-                  className="bg-background"
-                />
-              </div>
+              <Tabs value={withdrawMethod} onValueChange={(v) => setWithdrawMethod(v as 'account' | 'card')} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="account" className="gap-2">
+                    <Icon name="User" size={16} />
+                    На аккаунт
+                  </TabsTrigger>
+                  <TabsTrigger value="card" className="gap-2">
+                    <Icon name="CreditCard" size={16} />
+                    На карту
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="account" className="space-y-4 mt-0">
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Имя пользователя Roblox</Label>
+                    <Input
+                      id="username"
+                      placeholder="Введите ваш никнейм"
+                      value={robloxUsername}
+                      onChange={(e) => setRobloxUsername(e.target.value)}
+                      className="bg-background"
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="card" className="space-y-4 mt-0">
+                  <div className="space-y-2">
+                    <Label htmlFor="cardName">Название карты</Label>
+                    <Input
+                      id="cardName"
+                      placeholder="Например: Roblox Gift Card"
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value)}
+                      className="bg-background"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="cardCode">Код активации</Label>
+                    <Input
+                      id="cardCode"
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
+                      value={cardCode}
+                      onChange={(e) => setCardCode(e.target.value)}
+                      className="bg-background font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">Введите код с вашей игровой карты</p>
+                  </div>
+                </TabsContent>
+              </Tabs>
               
               <div className="space-y-2">
                 <Label htmlFor="amount">Сумма вывода (Robux)</Label>
@@ -417,7 +481,12 @@ const Index = () => {
               <Button 
                 className="w-full text-lg py-6 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90"
                 onClick={handleWithdraw}
-                disabled={!robloxUsername || !withdrawAmount || parseInt(withdrawAmount) < 50}
+                disabled={
+                  !withdrawAmount || 
+                  parseInt(withdrawAmount) < 50 ||
+                  (withdrawMethod === 'account' && !robloxUsername) ||
+                  (withdrawMethod === 'card' && (!cardName || !cardCode))
+                }
               >
                 <Icon name="Send" size={20} className="mr-2" />
                 Вывести Robux
@@ -452,9 +521,30 @@ const Index = () => {
                       className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="font-semibold text-lg">{withdrawal.amount} Robux</p>
-                          <p className="text-sm text-muted-foreground">@{withdrawal.username}</p>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-lg">{withdrawal.amount} Robux</p>
+                            {withdrawal.method === 'account' ? (
+                              <Badge variant="outline" className="text-xs">
+                                <Icon name="User" size={12} className="mr-1" />
+                                Аккаунт
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">
+                                <Icon name="CreditCard" size={12} className="mr-1" />
+                                Карта
+                              </Badge>
+                            )}
+                          </div>
+                          {withdrawal.method === 'account' && withdrawal.username && (
+                            <p className="text-sm text-muted-foreground">@{withdrawal.username}</p>
+                          )}
+                          {withdrawal.method === 'card' && withdrawal.cardName && (
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              <p>{withdrawal.cardName}</p>
+                              <p className="font-mono text-xs">{withdrawal.cardCode}</p>
+                            </div>
+                          )}
                         </div>
                         <Badge className={`${getStatusColor(withdrawal.status)} text-white`}>
                           {getStatusText(withdrawal.status)}
